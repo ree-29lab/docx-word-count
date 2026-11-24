@@ -171,6 +171,21 @@ function countFile(path, bodyOnly) {
     return result;
 }
 
+function readStdin() {
+    var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+    if (!data || data.isNil()) return "";
+    var text = $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding);
+    return (text && !text.isNil()) ? text.js : "";
+}
+
+function reportCounts(counts) {
+    var lines = [];
+    lines.push("中文字符 " + pad(counts.cjk, 6) + "    英文单词 " + pad(counts.words, 5));
+    lines.push("字数     " + pad(counts.total, 6) + "    字符数(不计空格) " + pad(counts.charsNoSpace, 6));
+    lines.push("字符数(含空格) " + pad(counts.chars, 6));
+    return lines.join("\n");
+}
+
 function pad(value, width) {
     var text = String(value);
     while (text.length < width) text = " " + text;
@@ -240,17 +255,29 @@ function run(argv) {
     var bodyOnly = false;
     var asJson = false;
     var asDialog = false;
+    var asStdin = false;
+    var literal = null;
 
     for (var i = 0; i < argv.length; i++) {
         var arg = argv[i];
         if (arg === "--body-only") bodyOnly = true;
         else if (arg === "--json") asJson = true;
         else if (arg === "--dialog") asDialog = true;
+        else if (arg === "--stdin") asStdin = true;
+        else if (arg === "--text") {
+            if (i + 1 >= argv.length) {
+                writeToStderr("--text 后面要跟一段文字");
+                $.exit(2);
+            }
+            literal = argv[++i];
+        }
         else if (arg === "-h" || arg === "--help") {
             writeToStdout("用法: wordcount 文件.docx [更多文件…] [--body-only] [--json] [--dialog]");
             writeToStdout("  --body-only  只数正文，不含页眉页脚与脚注尾注");
             writeToStdout("  --json       输出 JSON");
-            writeToStdout("  --dialog     用弹窗显示结果（Finder 快速操作用）");
+            writeToStdout("  --dialog     用弹窗显示结果（快速操作用）");
+            writeToStdout("  --stdin      统计管道送进来的文字（选中文字求字数用）");
+            writeToStdout("  --text 文字   统计一段直接给出的文字");
             $.exit(0);
         } else if (arg.charAt(0) === "-") {
             writeToStderr("未知参数: " + arg);
@@ -258,6 +285,31 @@ function run(argv) {
         } else {
             paths.push(arg);
         }
+    }
+
+    if (asStdin || literal !== null) {
+        var input = literal !== null ? literal : readStdin();
+        var counts = countText(input);
+        if (asJson) {
+            writeToStdout(JSON.stringify({
+                cjk: counts.cjk,
+                words: counts.words,
+                total: counts.total,
+                charsNoSpace: counts.charsNoSpace,
+                chars: counts.chars
+            }, null, 2));
+        } else if (asDialog) {
+            var dialogApp = Application.currentApplication();
+            dialogApp.includeStandardAdditions = true;
+            dialogApp.displayDialog(reportCounts(counts), {
+                withTitle: "统计选中字数",
+                buttons: ["好"],
+                defaultButton: "好"
+            });
+        } else {
+            writeToStdout(reportCounts(counts));
+        }
+        $.exit(0);
     }
 
     if (paths.length === 0) {

@@ -49,6 +49,28 @@ check with-header.docx     ""              4 0
 check with-header.docx     "--body-only"   2 0
 check field-code.docx      ""              4 0
 
+# Selected-text mode: the pipeline the "统计选中字数" service uses.
+check_text() {
+    local label="$1" text="$2" wantCjk="$3" wantWords="$4"
+    local got
+    got="$(printf '%s' "$text" | "$ROOT/bin/docxcount" --stdin --json 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print(d["cjk"], d["words"])
+')"
+    checks=$((checks + 1))
+    if [ "$got" = "$wantCjk $wantWords" ]; then
+        printf 'PASS  %-24s cjk=%-4s words=%s\n' "$label" "$wantCjk" "$wantWords"
+    else
+        printf 'FAIL  %-24s want "%s %s", got "%s"\n' "$label" "$wantCjk" "$wantWords" "$got"
+        failures=$((failures + 1))
+    fi
+}
+
+check_text "stdin 中英混排" "你好 world 42" 2 2
+check_text "stdin 整段中文" "今天天气不错，我去跑步了。" 11 0
+check_text "stdin 空输入" "" 0 0
+
 # The same logic lives in --selftest, which runs without any file.
 checks=$((checks + 1))
 if "$ROOT/bin/docxcount" --selftest >/dev/null 2>&1; then

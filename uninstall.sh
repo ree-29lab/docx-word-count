@@ -7,7 +7,8 @@
 set -euo pipefail
 
 SUPPORT_DIR="$HOME/Library/Application Support/DocxWordCount"
-WORKFLOW_DST="$HOME/Library/Services/DocxWordCount.workflow"
+SERVICES_DIR="$HOME/Library/Services"
+WORKFLOWS=(DocxWordCount.workflow CountSelection.workflow)
 LINK_RECORD="$SUPPORT_DIR/cli-link.txt"
 
 DRY_RUN=0
@@ -34,8 +35,10 @@ if [ -f "$LINK_RECORD" ]; then
     act rm -f "$link"
 fi
 
-say "删除 Finder 快速操作 ${WORKFLOW_DST}"
-act rm -rf "$WORKFLOW_DST"
+for workflow in "${WORKFLOWS[@]}"; do
+    say "删除快速操作 ${SERVICES_DIR}/${workflow}"
+    act rm -rf "$SERVICES_DIR/$workflow"
+done
 
 say "删除程序目录 ${SUPPORT_DIR}"
 act rm -rf "$SUPPORT_DIR"

@@ -16,9 +16,7 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SUPPORT_DIR="$HOME/Library/Application Support/DocxWordCount"
 SERVICES_DIR="$HOME/Library/Services"
-WORKFLOW_NAME="DocxWordCount.workflow"
-WORKFLOW_SRC="$SRC_DIR/quickaction/$WORKFLOW_NAME"
-WORKFLOW_DST="$SERVICES_DIR/$WORKFLOW_NAME"
+WORKFLOWS=(DocxWordCount.workflow CountSelection.workflow)
 LINK_RECORD="$SUPPORT_DIR/cli-link.txt"
 
 DRY_RUN=0
@@ -48,7 +46,9 @@ for required in /usr/bin/osascript /usr/bin/unzip /usr/bin/zip; do
     [ -x "$required" ] || { echo "missing $required" >&2; exit 1; }
 done
 [ -f "$SRC_DIR/src/wordcount.js" ] || { echo "src/wordcount.js not found next to this installer" >&2; exit 1; }
-[ -d "$WORKFLOW_SRC" ] || { echo "quickaction/ not found next to this installer" >&2; exit 1; }
+for workflow in "${WORKFLOWS[@]}"; do
+    [ -d "$SRC_DIR/quickaction/$workflow" ] || { echo "quickaction/$workflow missing next to this installer" >&2; exit 1; }
+done
 
 # ---------- program ----------
 say "安装程序到 ${SUPPORT_DIR}"
@@ -87,11 +87,14 @@ else
 fi
 
 # ---------- quick action ----------
-say "安装 Finder 快速操作：右键 › 快速操作 › 统计字数"
+say "安装两个快速操作：选中文件 › 统计字数；选中文字 › 统计选中字数"
 act mkdir -p "$SERVICES_DIR"
-act rm -rf "$WORKFLOW_DST"
-act cp -R "$WORKFLOW_SRC" "$WORKFLOW_DST"
-act touch "$WORKFLOW_DST"
+for workflow in "${WORKFLOWS[@]}"; do
+    act rm -rf "$SERVICES_DIR/$workflow"
+    act cp -R "$SRC_DIR/quickaction/$workflow" "$SERVICES_DIR/$workflow"
+    act touch "$SERVICES_DIR/$workflow"
+    printf '    %s\n' "$SERVICES_DIR/$workflow"
+done
 
 if [ "$DRY_RUN" = 0 ]; then
     # Finder caches the services menu; restarting it is the reliable refresh.
@@ -109,8 +112,9 @@ if [ "$DRY_RUN" = 0 ]; then
 fi
 
 echo
-echo "完成。两种用法："
-echo "  1) Finder 里选中一个 .docx › 右键 › 快速操作 › 统计字数"
-echo "  2) 终端：docxcount 文件.docx（多个文件也行；--body-only 只数正文）"
+echo "完成。三种用法："
+echo "  1) Finder 里选中一个 .docx › 右键 › 快速操作 › 统计字数（整篇）"
+echo "  2) 任何 app 里选中一段文字 › 右键 › 服务 › 统计选中字数（只数选中的部分）"
+echo "  3) 终端：docxcount 文件.docx（多个文件也行；--body-only 只数正文）"
 echo "  程序目录：${SUPPORT_DIR}"
 echo "  卸载：bash \"$SRC_DIR/uninstall.sh\""
