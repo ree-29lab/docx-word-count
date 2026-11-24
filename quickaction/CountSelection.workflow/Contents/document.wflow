@@ -60,11 +60,14 @@
 				<dict>
 					<key>COMMAND_STRING</key>
 					<string>SUPPORT="$HOME/Library/Application Support/DocxWordCount"
+LOG="$HOME/Library/Logs/DocxWordCount.log"
 if [ ! -x "$SUPPORT/wordcount" ]; then
   /usr/bin/osascript -e 'display dialog "统计选中字数：找不到已安装的程序，请再运行一次 install.sh。" buttons {"好"} default button 1'
   exit 1
 fi
-exec "$SUPPORT/wordcount" --stdin --dialog</string>
+payload="$(cat)"
+printf '[%s] 服务被调用，收到 %s 个字符\n' "$(date '+%H:%M:%S')" "${#payload}" &gt;&gt; "$LOG"
+printf '%s' "$payload" | "$SUPPORT/wordcount" --stdin --dialog</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>inputMethod</key>
@@ -124,11 +127,11 @@ exec "$SUPPORT/wordcount" --stdin --dialog</string>
 	<key>workflowMetaData</key>
 	<dict>
 		<key>serviceInputTypeIdentifier</key>
-		<string>com.apple.Automator.fileSystemObject</string>
+		<string>com.apple.Automator.text</string>
 		<key>serviceOutputTypeIdentifier</key>
 		<string>com.apple.Automator.nothing</string>
 		<key>serviceProcessesInput</key>
-		<integer>0</integer>
+		<integer>1</integer>
 		<key>workflowTypeIdentifier</key>
 		<string>com.apple.Automator.servicesMenu</string>
 	</dict>
