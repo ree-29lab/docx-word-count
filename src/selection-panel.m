@@ -182,7 +182,7 @@ static const CGFloat PanelHeight = 56;
     if (!screen) return;
     NSRect visible = screen.visibleFrame;
     NSRect frame = NSMakeRect(visible.origin.x + visible.size.width - PanelWidth - 16,
-                              visible.origin.y + 8,
+                              visible.origin.y + 72,
                               PanelWidth,
                               PanelHeight);
     [_panel setFrame:frame display:NO];
