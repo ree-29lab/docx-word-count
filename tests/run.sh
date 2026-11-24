@@ -1,9 +1,12 @@
 #!/bin/bash
-# Runs the counter against the fixture documents and checks every number.
+# Runs the macOS implementation (bin/docxcount → JXA) against the shared
+# expectations in tests/cases.json, then checks the two behaviours that need a
+# real file: --selftest works and a non-docx argument is rejected.
 #
 #   bash tests/run.sh
 #
-# Needs python3 (for building fixtures and for asserting on JSON) and nothing else.
+# The same cases.json drives tests/run-node.mjs, which covers the core that
+# docxcount.html ships. Needs python3 to build fixtures and parse JSON.
 
 set -uo pipefail
 
@@ -17,83 +20,81 @@ python3 "$HERE/make_fixtures.py" "$WORK/fixtures" >/dev/null || {
     exit 1
 }
 
-failures=0
-checks=0
+python3 - "$ROOT" "$WORK/fixtures" "$HERE/cases.json" <<'PY'
+import json
+import subprocess
+import sys
 
-# name, flags, expected cjk, expected words
-check() {
-    local name="$1" flags="$2" wantCjk="$3" wantWords="$4"
-    local out
-    out="$("$ROOT/bin/docxcount" --json $flags "$WORK/fixtures/$name" 2>/dev/null)"
-    checks=$((checks + 1))
-    local got
-    got="$(printf '%s' "$out" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-f = data["files"][0]
-print(("ok" if f["ok"] else "fail"), f.get("cjk", 0), f.get("words", 0))
-')"
-    if [ "$got" = "ok $wantCjk $wantWords" ]; then
-        printf 'PASS  %-24s cjk=%-4s words=%s\n' "$name" "$wantCjk" "$wantWords"
-    else
-        printf 'FAIL  %-24s want "ok %s %s", got "%s"\n' "$name" "$wantCjk" "$wantWords" "$got"
-        failures=$((failures + 1))
-    fi
-}
+root, fixtures, cases_path = sys.argv[1], sys.argv[2], sys.argv[3]
+cases = json.load(open(cases_path, encoding="utf-8"))
+binary = root + "/bin/docxcount"
+failures = 0
+checks = 0
 
-check simple.docx          ""              2 2
-check split-runs.docx      ""              2 2
-check tracked-deletion.docx ""             4 0
-check tab-and-break.docx   ""              0 3
-check with-header.docx     ""              4 0
-check with-header.docx     "--body-only"   2 0
-check field-code.docx      ""              4 0
 
-# Selected-text mode: the pipeline the "统计选中字数" service uses.
-check_text() {
-    local label="$1" text="$2" wantCjk="$3" wantWords="$4"
-    local got
-    got="$(printf '%s' "$text" | "$ROOT/bin/docxcount" --stdin --json 2>/dev/null | python3 -c '
-import json, sys
-d = json.load(sys.stdin)
-print(d["cjk"], d["words"])
-')"
-    checks=$((checks + 1))
-    if [ "$got" = "$wantCjk $wantWords" ]; then
-        printf 'PASS  %-24s cjk=%-4s words=%s\n' "$label" "$wantCjk" "$wantWords"
-    else
-        printf 'FAIL  %-24s want "%s %s", got "%s"\n' "$label" "$wantCjk" "$wantWords" "$got"
-        failures=$((failures + 1))
-    fi
-}
+def run(args):
+    return subprocess.run([binary] + args, capture_output=True, text=True)
 
-check_text "stdin 中英混排" "你好 world 42" 2 2
-check_text "stdin 整段中文" "今天天气不错，我去跑步了。" 11 0
-check_text "stdin 空输入" "" 0 0
 
-# The same logic lives in --selftest, which runs without any file.
-checks=$((checks + 1))
+for case in cases["docx"]:
+    path = fixtures + "/" + case["fixture"]
+    args = ["--json"] + (["--body-only"] if case["bodyOnly"] else []) + [path]
+    result = run(args)
+    checks += 1
+    label = case["fixture"] + (" (body-only)" if case["bodyOnly"] else "")
+    try:
+        data = json.loads(result.stdout)["files"][0]
+        ok = data.get("ok") and data["cjk"] == case["cjk"] and data["words"] == case["words"]
+        detail = "cjk={} words={}".format(data.get("cjk"), data.get("words"))
+    except Exception:
+        ok = False
+        detail = "unparsable output: " + (result.stdout or result.stderr).strip()[:120]
+    if ok:
+        print("PASS  {:<30} {}".format(label, detail))
+    else:
+        failures += 1
+        print("FAIL  {:<30} want cjk={} words={}, got {}".format(
+            label, case["cjk"], case["words"], detail))
+
+for case in cases["text"]:
+    result = run(["--text", case["text"], "--json"])
+    checks += 1
+    label = "text " + json.dumps(case["text"], ensure_ascii=False)
+    try:
+        data = json.loads(result.stdout)
+        ok = data["cjk"] == case["cjk"] and data["words"] == case["words"]
+        detail = "cjk={} words={}".format(data["cjk"], data["words"])
+    except Exception:
+        ok = False
+        detail = "unparsable output: " + (result.stdout or result.stderr).strip()[:120]
+    if ok:
+        print("PASS  {:<30} {}".format(label, detail))
+    else:
+        failures += 1
+        print("FAIL  {:<30} want cjk={} words={}, got {}".format(
+            label, case["cjk"], case["words"], detail))
+
+print()
+print("{} / {} 项通过".format(checks - failures, checks))
+sys.exit(0 if failures == 0 else 1)
+PY
+failures=$?
+
 if "$ROOT/bin/docxcount" --selftest >/dev/null 2>&1; then
-    printf 'PASS  %-24s\n' "--selftest"
+    printf 'PASS  %-30s\n' "--selftest"
 else
-    printf 'FAIL  %-24s\n' "--selftest"
+    printf 'FAIL  %-30s\n' "--selftest"
     failures=$((failures + 1))
 fi
 
 # A non-docx argument must fail loudly instead of printing zeroes.
-checks=$((checks + 1))
 echo "not a docx" > "$WORK/plain.txt"
 if "$ROOT/bin/docxcount" "$WORK/plain.txt" >/dev/null 2>&1; then
-    printf 'FAIL  %-24s rejected a non-docx?\n' "plain.txt"
+    printf 'FAIL  %-30s accepted a non-docx?\n' "plain.txt"
     failures=$((failures + 1))
 else
-    printf 'PASS  %-24s rejected\n' "plain.txt"
+    printf 'PASS  %-30s rejected\n' "plain.txt"
 fi
 
-echo
-if [ "$failures" -eq 0 ]; then
-    echo "全部 $checks 项通过"
-    exit 0
-fi
-echo "$failures / $checks 项失败"
+[ "$failures" -eq 0 ] && exit 0
 exit 1

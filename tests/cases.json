@@ -1,0 +1,20 @@
+{
+  "comment": "Shared expectations. Every implementation (macOS JXA, browser/Node core) must agree with this file.",
+  "docx": [
+    { "fixture": "simple.docx", "bodyOnly": false, "cjk": 2, "words": 2 },
+    { "fixture": "split-runs.docx", "bodyOnly": false, "cjk": 2, "words": 2 },
+    { "fixture": "tracked-deletion.docx", "bodyOnly": false, "cjk": 4, "words": 0 },
+    { "fixture": "tab-and-break.docx", "bodyOnly": false, "cjk": 0, "words": 3 },
+    { "fixture": "with-header.docx", "bodyOnly": false, "cjk": 4, "words": 0 },
+    { "fixture": "with-header.docx", "bodyOnly": true, "cjk": 2, "words": 0 },
+    { "fixture": "field-code.docx", "bodyOnly": false, "cjk": 4, "words": 0 }
+  ],
+  "text": [
+    { "text": "", "cjk": 0, "words": 0 },
+    { "text": "你好 world 42", "cjk": 2, "words": 2 },
+    { "text": "今天天气不错，我去跑步了。", "cjk": 11, "words": 0 },
+    { "text": "don't stop", "cjk": 0, "words": 2 },
+    { "text": "あア한", "cjk": 3, "words": 0 },
+    { "text": "  多   空格  ", "cjk": 3, "words": 0 }
+  ]
+}

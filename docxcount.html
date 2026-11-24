@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docx 字数统计</title>
+<style>
+  :root { color-scheme: light dark; --line: #d0d0d5; --muted: #6b6b73; --accent: #0a66d8; }
+  @media (prefers-color-scheme: dark) { :root { --line: #3a3a40; --muted: #9a9aa2; --accent: #58a6ff; } }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; padding: 28px 20px 60px; max-width: 780px;
+         font: 15px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.lead { margin: 0 0 22px; color: var(--muted); font-size: 13px; }
+  section { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 18px; }
+  h2 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
+  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 26px 16px; text-align: center;
+          color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop.hot { border-color: var(--accent); background: rgba(10, 102, 216, .06); }
+  #drop strong { color: inherit; }
+  textarea { width: 100%; min-height: 96px; resize: vertical; padding: 10px; border-radius: 8px;
+             border: 1px solid var(--line); font: inherit; background: transparent; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  tr.total td { font-weight: 600; }
+  .row-empty { display: none; }
+  label.toggle { display: inline-flex; gap: 6px; align-items: center; margin-top: 12px;
+                 font-size: 13px; color: var(--muted); cursor: pointer; }
+  .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+  .err { color: #c62828; }
+  #badge { position: fixed; right: 12px; bottom: 10px; font-size: 11px; color: var(--muted);
+           background: rgba(127,127,127,.12); padding: 3px 8px; border-radius: 99px; }
+  #badge.bad { color: #fff; background: #c62828; }
+  footer { margin-top: 26px; font-size: 12px; color: var(--muted); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>docx 字数统计</h1>
+<p class="lead">把 .docx 拖进来，或者把一段文字粘进来。文件只在本机解析，不上传、不联网。</p>
+
+<section>
+  <h2>① 数一个文件（整篇）</h2>
+  <div id="drop" tabindex="0" role="button" aria-label="选择或拖入 .docx 文件">
+    <div><strong>把 .docx 拖到这里</strong></div>
+    <div style="margin-top:6px;font-size:13px">或点击选择文件（可多选）</div>
+  </div>
+  <input type="file" id="filePicker" accept=".docx" multiple hidden>
+  <label class="toggle"><input type="checkbox" id="bodyOnly"> 只数正文（不含页眉页脚、脚注尾注）</label>
+  <table id="results" aria-live="polite">
+    <thead><tr><th>文件</th><th>中文字符</th><th>英文单词</th><th>字数</th><th>字符(不计空格)</th><th>字符(含空格)</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="note">字数 = 中文字符 + 英文单词。修订里删掉的文字、域代码（页码/目录）不计。</p>
+</section>
+
+<section>
+  <h2>② 数一段文字（只数选中的部分）</h2>
+  <textarea id="text" placeholder="在这里粘贴一段文字，立刻出字数…"></textarea>
+  <table id="textResult" aria-live="polite">
+    <tbody>
+      <tr><td>中文字符</td><td id="tCjk">0</td></tr>
+      <tr><td>英文单词</td><td id="tWords">0</td></tr>
+      <tr class="total"><td>字数</td><td id="tTotal">0</td></tr>
+      <tr><td>字符数（不计空格）</td><td id="tNoSpace">0</td></tr>
+      <tr><td>字符数（含空格）</td><td id="tChars">0</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Windows 上想数别处的选中文字：先 <code>Ctrl+C</code> 复制，再在这个框里 <code>Ctrl+V</code>。</p>
+</section>
+
+<footer>
+  同一个计数内核也用在 macOS 的终端命令 <code>docxcount</code> 和两个右键菜单里；三处读同一份测试样例。
+</footer>
+
+<div id="badge">自检中…</div>
+
+<script>
+/* ==== CORE (injected by tools/build-page.py from src/count-core.cjs) ==== */
+// docx-word-count core: character and word counting for .docx and plain text.
+//
+// Platform independent on purpose. It runs in a browser page, in Node, and in any
+// other JavaScript host that has TextDecoder, Blob, Response and DecompressionStream.
+// Nothing here touches the DOM, the filesystem, or an OS API.
+//
+// Counting rules:
+//   - CJK characters (Chinese, kana, Hangul, CJK compatibility) count one each.
+//   - Runs of Latin letters, digits and apostrophes count one word each.
+//   - Everything else separates. Tabs and line breaks separate words.
+//   - Text that Word marks deleted (w:del / w:delText) and field codes (w:instrText) are skipped.
+
+(function (root, factory) {
+    if (typeof module === "object" && module.exports) {
+        module.exports = factory();
+    } else {
+        root.DocxCountCore = factory();
+    }
+}(typeof globalThis !== "undefined" ? globalThis : this, function () {
+    "use strict";
+
+    var TEXT_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/;
+    var SKIP_SUBTREES = { del: 1, instrText: 1, delText: 1 };
+    var TAG = /<(\/?)([A-Za-z0-9_.:-]+)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g;
+
+    function isCjk(code) {
+        return (code >= 0x4E00 && code <= 0x9FFF) ||
+            (code >= 0x3400 && code <= 0x4DBF) ||
+            (code >= 0xF900 && code <= 0xFAFF) ||
+            (code >= 0x3040 && code <= 0x30FF) ||
+            (code >= 0xAC00 && code <= 0xD7AF);
+    }
+
+    function decodeEntities(text) {
+        if (text.indexOf("&") < 0) return text;
+        return text
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, "\"")
+            .replace(/&apos;/g, "'")
+            .replace(/&#x([0-9a-fA-F]+);/g, function (_, hex) {
+                return String.fromCodePoint(parseInt(hex, 16));
+            })
+            .replace(/&#(\d+);/g, function (_, dec) {
+                return String.fromCodePoint(parseInt(dec, 10));
+            })
+            .replace(/&amp;/g, "&");
+    }
+
+    function countText(text) {
+        var cjk = 0;
+        var words = 0;
+        var noSpace = 0;
+        var visible = 0;
+        var inWord = false;
+        for (var i = 0; i < text.length; i++) {
+            var code = text.charCodeAt(i);
+            if (code !== 10 && code !== 13) visible++;
+            if (code !== 32 && code !== 9 && code !== 10 && code !== 13) noSpace++;
+            if (isCjk(code)) {
+                cjk++;
+                inWord = false;
+            } else if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) ||
+                (code >= 48 && code <= 57) || code === 39) {
+                if (!inWord) {
+                    words++;
+                    inWord = true;
+                }
+            } else {
+                inWord = false;
+            }
+        }
+        return {
+            cjk: cjk,
+            words: words,
+            total: cjk + words,
+            chars: visible,
+            charsNoSpace: noSpace
+        };
+    }
+
+    // Turns one OOXML part into plain text, keeping the word boundaries intact.
+    function partToText(xml) {
+        var out = [];
+        var skipName = null;
+        var skipDepth = 0;
+        var textStart = -1;
+        var match;
+
+        TAG.lastIndex = 0;
+        while ((match = TAG.exec(xml)) !== null) {
+            var closing = match[1] === "/";
+            var name = match[2];
+            var local = name.indexOf(":") >= 0 ? name.slice(name.indexOf(":") + 1) : name;
+            var selfClosing = match[4] === "/";
+
+            if (skipDepth > 0) {
+                if (!selfClosing && local === skipName) skipDepth += closing ? -1 : 1;
+                continue;
+            }
+
+            if (!closing && !selfClosing && SKIP_SUBTREES[local]) {
+                skipName = local;
+                skipDepth = 1;
+                continue;
+            }
+
+            if (local === "t") {
+                if (closing) {
+                    if (textStart >= 0) {
+                        out.push(decodeEntities(xml.slice(textStart, match.index)));
+                        textStart = -1;
+                    }
+                } else if (!selfClosing) {
+                    textStart = TAG.lastIndex;
+                }
+                continue;
+            }
+
+            if (closing) {
+                if (local === "p") out.push("\n");
+                continue;
+            }
+
+            if (selfClosing || local === "tab" || local === "br" || local === "cr") {
+                if (local === "tab") out.push(" ");
+                else if (local === "br" || local === "cr") out.push("\n");
+            }
+        }
+        return out.join("");
+    }
+
+    function findEndOfCentralDirectory(view, bytes) {
+        var lowest = Math.max(0, bytes.length - 22 - 65535);
+        for (var i = bytes.length - 22; i >= lowest; i--) {
+            if (view.getUint32(i, true) === 0x06054b50) return i;
+        }
+        return -1;
+    }
+
+    function listEntries(buffer) {
+        var bytes = new Uint8Array(buffer);
+        var view = new DataView(buffer);
+        var eocd = findEndOfCentralDirectory(view, bytes);
+        if (eocd < 0) {
+            throw new Error("不是有效的 .docx（压缩包结构找不到；旧版 .doc 或加密文件会这样）");
+        }
+        var count = view.getUint16(eocd + 10, true);
+        var offset = view.getUint32(eocd + 16, true);
+        var entries = [];
+        for (var index = 0; index < count; index++) {
+            if (view.getUint32(offset, true) !== 0x02014b50) break;
+            var nameLength = view.getUint16(offset + 28, true);
+            var extraLength = view.getUint16(offset + 30, true);
+            var commentLength = view.getUint16(offset + 32, true);
+            entries.push({
+                name: new TextDecoder().decode(bytes.subarray(offset + 46, offset + 46 + nameLength)),
+                method: view.getUint16(offset + 10, true),
+                compressedSize: view.getUint32(offset + 20, true),
+                localOffset: view.getUint32(offset + 42, true)
+            });
+            offset += 46 + nameLength + extraLength + commentLength;
+        }
+        return entries;
+    }
+
+    async function entryBytes(buffer, entry) {
+        var bytes = new Uint8Array(buffer);
+        var view = new DataView(buffer);
+        if (view.getUint32(entry.localOffset, true) !== 0x04034b50) {
+            throw new Error("压缩包结构异常");
+        }
+        var nameLength = view.getUint16(entry.localOffset + 26, true);
+        var extraLength = view.getUint16(entry.localOffset + 28, true);
+        var start = entry.localOffset + 30 + nameLength + extraLength;
+        var raw = bytes.subarray(start, start + entry.compressedSize);
+        if (entry.method === 0) return raw;
+        if (entry.method !== 8) {
+            throw new Error("不支持的压缩方式：" + entry.method);
+        }
+        if (typeof DecompressionStream === "undefined") {
+            throw new Error("这个浏览器太旧，解压不了 docx；请用较新的 Chrome / Edge / Safari / Firefox");
+        }
+        var stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+
+    // Counts a whole .docx. bodyOnly drops headers, footers, footnotes and endnotes.
+    async function countDocxBuffer(buffer, options) {
+        var bodyOnly = !!(options && options.bodyOnly);
+        var entries = listEntries(buffer).filter(function (entry) {
+            if (!TEXT_PARTS.test(entry.name)) return false;
+            return bodyOnly ? entry.name === "word/document.xml" : true;
+        });
+        if (!entries.some(function (entry) {
+            return entry.name === "word/document.xml";
+        })) {
+            throw new Error("这个文件里没有正文（不是 Word 文档？）");
+        }
+
+        var parts = [];
+        var texts = [];
+        var decoder = new TextDecoder("utf-8");
+        for (var index = 0; index < entries.length; index++) {
+            var bytes = await entryBytes(buffer, entries[index]);
+            parts.push(entries[index].name);
+            texts.push(partToText(decoder.decode(bytes)));
+        }
+
+        var counts = countText(texts.join("\n"));
+        counts.parts = parts;
+        return counts;
+    }
+
+    return {
+        countText: countText,
+        partToText: partToText,
+        countDocxBuffer: countDocxBuffer,
+        listEntries: listEntries
+    };
+}));
+
+/* ==== /CORE ==== */
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var core = window.DocxCountCore;
+
+  // ---- 文件整篇统计 ----
+  var drop = document.getElementById("drop");
+  var picker = document.getElementById("filePicker");
+  var tbody = document.querySelector("#results tbody");
+  var bodyOnlyBox = document.getElementById("bodyOnly");
+  var rows = [];
+
+  function num(value) { return value.toLocaleString("en-US"); }
+
+  function render() {
+    tbody.innerHTML = "";
+    if (rows.length === 0) {
+      var empty = document.createElement("tr");
+      var cell = document.createElement("td");
+      cell.colSpan = 6;
+      cell.style.color = "var(--muted)";
+      cell.textContent = "还没有文件";
+      empty.appendChild(cell);
+      tbody.appendChild(empty);
+      return;
+    }
+    rows.forEach(function (row) {
+      var tr = document.createElement("tr");
+      var name = document.createElement("td");
+      name.textContent = row.name;
+      tr.appendChild(name);
+      if (row.error) {
+        var err = document.createElement("td");
+        err.colSpan = 5;
+        err.className = "err";
+        err.textContent = row.error;
+        tr.appendChild(err);
+      } else {
+        [row.cjk, row.words, row.total, row.charsNoSpace, row.chars].forEach(function (value) {
+          var cell = document.createElement("td");
+          cell.textContent = num(value);
+          tr.appendChild(cell);
+        });
+      }
+      tbody.appendChild(tr);
+    });
+    if (rows.length > 1) {
+      var ok = rows.filter(function (row) { return !row.error; });
+      var sum = ok.reduce(function (acc, row) {
+        acc.cjk += row.cjk; acc.words += row.words; acc.total += row.total;
+        acc.charsNoSpace += row.charsNoSpace; acc.chars += row.chars;
+        return acc;
+      }, { cjk: 0, words: 0, total: 0, charsNoSpace: 0, chars: 0 });
+      var tr = document.createElement("tr");
+      tr.className = "total";
+      var label = document.createElement("td");
+      label.textContent = "合计 " + ok.length + " 个文件";
+      tr.appendChild(label);
+      [sum.cjk, sum.words, sum.total, sum.charsNoSpace, sum.chars].forEach(function (value) {
+        var cell = document.createElement("td");
+        cell.textContent = num(value);
+        tr.appendChild(cell);
+      });
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function addFile(file) {
+    var row = { name: file.name, error: "" };
+    rows.push(row);
+    render();
+    try {
+      var buffer = await file.arrayBuffer();
+      var counts = await core.countDocxBuffer(buffer, { bodyOnly: bodyOnlyBox.checked });
+      row.cjk = counts.cjk;
+      row.words = counts.words;
+      row.total = counts.total;
+      row.charsNoSpace = counts.charsNoSpace;
+      row.chars = counts.chars;
+    } catch (error) {
+      row.error = error && error.message ? error.message : String(error);
+    }
+    render();
+  }
+
+  async function addFiles(list) {
+    var files = Array.prototype.slice.call(list);
+    for (var i = 0; i < files.length; i++) await addFile(files[i]);
+  }
+
+  drop.addEventListener("click", function () { picker.click(); });
+  drop.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); picker.click(); }
+  });
+  picker.addEventListener("change", function () {
+    addFiles(picker.files);
+    picker.value = "";
+  });
+  ["dragenter", "dragover"].forEach(function (name) {
+    drop.addEventListener(name, function (event) {
+      event.preventDefault();
+      drop.classList.add("hot");
+    });
+  });
+  ["dragleave", "drop"].forEach(function (name) {
+    drop.addEventListener(name, function (event) {
+      event.preventDefault();
+      drop.classList.remove("hot");
+    });
+  });
+  drop.addEventListener("drop", function (event) {
+    if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length) {
+      addFiles(event.dataTransfer.files);
+    }
+  });
+  window.addEventListener("dragover", function (event) { event.preventDefault(); });
+  window.addEventListener("drop", function (event) { event.preventDefault(); });
+  bodyOnlyBox.addEventListener("change", function () {
+    if (rows.length === 0) return;
+    rows = [];
+    render();
+  });
+
+  // ---- 一段文字 ----
+  var textBox = document.getElementById("text");
+  var out = {
+    cjk: document.getElementById("tCjk"),
+    words: document.getElementById("tWords"),
+    total: document.getElementById("tTotal"),
+    noSpace: document.getElementById("tNoSpace"),
+    chars: document.getElementById("tChars")
+  };
+
+  function updateText() {
+    var counts = core.countText(textBox.value);
+    out.cjk.textContent = num(counts.cjk);
+    out.words.textContent = num(counts.words);
+    out.total.textContent = num(counts.total);
+    out.noSpace.textContent = num(counts.charsNoSpace);
+    out.chars.textContent = num(counts.chars);
+  }
+  textBox.addEventListener("input", updateText);
+  updateText();
+
+  // ---- 自检：在页面里现造一个 docx，走完「解析压缩包 → 拼文本 → 计数」整条路 ----
+  var CRC_TABLE = (function () {
+    var table = new Uint32Array(256);
+    for (var i = 0; i < 256; i++) {
+      var c = i;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[i] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes) {
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // Builds an uncompressed (method 0) zip, enough to exercise the reader.
+  function makeZip(files) {
+    var encoder = new TextEncoder();
+    var parts = [];
+    var central = [];
+    var offset = 0;
+    files.forEach(function (file) {
+      var name = encoder.encode(file.name);
+      var data = encoder.encode(file.text);
+      var header = new Uint8Array(30 + name.length + data.length);
+      var view = new DataView(header.buffer);
+      view.setUint32(0, 0x04034b50, true);
+      view.setUint16(4, 20, true);
+      view.setUint32(14, crc32(data), true);
+      view.setUint32(18, data.length, true);
+      view.setUint32(22, data.length, true);
+      view.setUint16(26, name.length, true);
+      header.set(name, 30);
+      header.set(data, 30 + name.length);
+      parts.push(header);
+      central.push({ name: name, crc: crc32(data), size: data.length, offset: offset });
+      offset += header.length;
+    });
+    var centralParts = [];
+    var centralSize = 0;
+    central.forEach(function (entry) {
+      var record = new Uint8Array(46 + entry.name.length);
+      var view = new DataView(record.buffer);
+      view.setUint32(0, 0x02014b50, true);
+      view.setUint16(4, 20, true);
+      view.setUint16(6, 20, true);
+      view.setUint32(16, entry.crc, true);
+      view.setUint32(20, entry.size, true);
+      view.setUint32(24, entry.size, true);
+      view.setUint16(28, entry.name.length, true);
+      view.setUint32(42, entry.offset, true);
+      record.set(entry.name, 46);
+      centralParts.push(record);
+      centralSize += record.length;
+    });
+    var end = new Uint8Array(22);
+    var endView = new DataView(end.buffer);
+    endView.setUint32(0, 0x06054b50, true);
+    endView.setUint16(8, central.length, true);
+    endView.setUint16(10, central.length, true);
+    endView.setUint32(12, centralSize, true);
+    endView.setUint32(16, offset, true);
+
+    var all = parts.concat(centralParts, [end]);
+    var total = all.reduce(function (sum, part) { return sum + part.length; }, 0);
+    var out = new Uint8Array(total);
+    var position = 0;
+    all.forEach(function (part) {
+      out.set(part, position);
+      position += part.length;
+    });
+    return out.buffer;
+  }
+
+  function wx(body) {
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      "<w:body>" + body + "</w:body></w:document>";
+  }
+
+  function runSelfTest() {
+    var badge = document.getElementById("badge");
+    var results = [];
+    results.push(["text", core.countText("你好 world 42"), 2, 2]);
+    (async function () {
+      try {
+        var plain = makeZip([{ name: "word/document.xml", text: wx("<w:p><w:r><w:t>你好 world 42</w:t></w:r></w:p>") }]);
+        var counted = await core.countDocxBuffer(plain, {});
+        results.push(["docx", counted, 2, 2]);
+
+        var withHeader = makeZip([
+          { name: "word/document.xml", text: wx("<w:p><w:r><w:t>正文</w:t></w:r></w:p>") },
+          { name: "word/header1.xml", text: wx("<w:p><w:r><w:t>页眉</w:t></w:r></w:p>") }
+        ]);
+        results.push(["header", await core.countDocxBuffer(withHeader, {}), 4, 0]);
+        results.push(["bodyOnly", await core.countDocxBuffer(withHeader, { bodyOnly: true }), 2, 0]);
+
+        var deleted = makeZip([{
+          name: "word/document.xml",
+          text: wx('<w:p><w:r><w:t>保留</w:t></w:r><w:del w:id="1"><w:r><w:delText>删掉</w:delText></w:r></w:del><w:r><w:t>留着</w:t></w:r></w:p>')
+        }]);
+        results.push(["deleted", await core.countDocxBuffer(deleted, {}), 4, 0]);
+      } catch (error) {
+        badge.textContent = "自检出错：" + (error && error.message ? error.message : error);
+        badge.className = "bad";
+        return;
+      }
+      var failed = results.filter(function (row) {
+        return row[1].cjk !== row[2] || row[1].words !== row[3];
+      });
+      if (failed.length === 0) {
+        badge.textContent = "自检 " + results.length + "/" + results.length + " 通过";
+      } else {
+        badge.className = "bad";
+        badge.textContent = "自检失败 " + failed.length + "/" + results.length;
+      }
+    })();
+  }
+
+  runSelfTest();
+})();
+</script>
+</body>
+</html>
