@@ -29,7 +29,7 @@ docxcount --json 报告.docx           # 给脚本用
 ## 安装
 
 ```bash
-git clone https://github.com/<owner>/docx-word-count.git
+git clone https://github.com/ree-29lab/docx-word-count.git
 cd docx-word-count
 bash install.sh
 ```
