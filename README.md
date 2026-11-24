@@ -34,7 +34,30 @@ Windows 上没有右键菜单，想数别处的选中文字就 **`Ctrl+C` 复制
 手机上直接开本地 html 文件很别扭，最省事的办法是把它放到网上：开启 GitHub Pages 后手机打开
 `https://ree-29lab.github.io/docx-word-count/docxcount.html` 即可（页面本身不联网、不上传文件）。
 
-## 二、macOS：装成右键菜单（可选）
+## 二、macOS：选中就自动出数（浮窗）
+
+装完之后会有一个常驻小面板：**在任何一个 app 里选中文字，右下角立刻跳出这段的字数**，不用右键、不用按键。
+
+```
+选中: 中 25字 英 10词 | 共 35
+字符数 66（不计空格）／75（含空格）
+```
+
+第一次使用要给一次权限（只给一次，之后永久）：
+
+1. 打开 **系统设置 › 隐私与安全性 › 辅助功能**
+2. 在列表里找到 **SelectionCount**，把开关打开
+3. 列表里没有它，就点 `+`，选 `~/Applications/SelectionCount.app`
+
+**为什么必须要这个权限**：读「当前选中的文字」只有辅助功能接口能做。它不读剪贴板、不记录、不联网，选中什么只算数不保存。不想要就 `bash uninstall.sh`，或直接在系统设置里把开关关掉。
+
+那个面板的名字叫 SelectionCount，装在 `~/Applications/SelectionCount.app`，由 `~/Library/LaunchAgents/com.docxwordcount.selectionpanel.plist` 开机自启。判断它有没有拿到权限：
+
+```bash
+~/Applications/SelectionCount.app/Contents/MacOS/SelectionCount --check-access
+```
+
+## 三、macOS：装成右键菜单（可选）
 
 ```bash
 git clone https://github.com/ree-29lab/docx-word-count.git
