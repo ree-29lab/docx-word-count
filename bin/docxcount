@@ -1,0 +1,32 @@
+#!/bin/bash
+# docxcount — count characters and words inside .docx files.
+#
+#   docxcount 报告.docx            单个文件，分行显示明细
+#   docxcount *.docx               多个文件，末尾给合计
+#   docxcount --json 报告.docx     输出 JSON
+#   docxcount --body-only 报告.docx 只数正文，不含页眉页脚与脚注尾注
+#
+# 计数口径：中文按字、英文与数字按词、删掉（修订删除）的文字不算。
+
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+installed="$HOME/Library/Application Support/DocxWordCount/wordcount.js"
+
+if [ -n "${DOCXCOUNT_JS:-}" ] && [ -f "${DOCXCOUNT_JS}" ]; then
+    js="$DOCXCOUNT_JS"
+elif [ -f "$here/../src/wordcount.js" ]; then
+    js="$here/../src/wordcount.js"
+elif [ -f "$here/wordcount.js" ]; then
+    js="$here/wordcount.js"
+else
+    js="$installed"
+fi
+
+if [ ! -f "$js" ]; then
+    echo "docxcount: 找不到 wordcount.js（找过 $js）" >&2
+    echo "docxcount: 先运行安装脚本 install.sh，或设置 DOCXCOUNT_JS 指向它" >&2
+    exit 1
+fi
+
+exec /usr/bin/osascript -l JavaScript "$js" "$@"
