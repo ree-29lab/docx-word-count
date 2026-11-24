@@ -4,6 +4,8 @@ Count characters and words on any system — **macOS, Windows, Linux** — for a
 
 One counting rule everywhere: **every CJK character counts one**, **every run of Latin letters, digits or apostrophes counts one word**.
 
+完整的中文说明（安装、用法、卸载、排错）见 **[使用说明.md](使用说明.md)**。
+
 | 你在哪 | 怎么用 | 装什么 |
 |---|---|---|
 | Windows / Linux | 双击 `docxcount.html` 用浏览器打开，拖入 .docx 或粘贴文字 | **什么都不用装** |
