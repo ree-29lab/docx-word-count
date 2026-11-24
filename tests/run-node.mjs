@@ -27,9 +27,15 @@ execFileSync("python3", [path.join(here, "make_fixtures.py"), fixtures], { stdio
 let checks = 0;
 let failures = 0;
 
-function report(label, got, wantCjk, wantWords) {
+function report(label, got, wantCjk, wantWords, extra) {
     checks++;
-    if (got.cjk === wantCjk && got.words === wantWords) {
+    let ok = got.cjk === wantCjk && got.words === wantWords;
+    if (extra) {
+        for (const key of Object.keys(extra)) {
+            if (got[key] !== extra[key]) ok = false;
+        }
+    }
+    if (ok) {
         console.log(`PASS  ${label.padEnd(34)} cjk=${wantCjk} words=${wantWords}`);
     } else {
         failures++;
@@ -45,7 +51,11 @@ for (const testCase of cases.docx) {
         { bodyOnly: testCase.bodyOnly }
     );
     void buffer;
-    report(`${testCase.fixture}${testCase.bodyOnly ? " (bodyOnly)" : ""}`, counts, testCase.cjk, testCase.words);
+    const extra = {};
+    for (const key of ["charsNoSpace", "chars"]) {
+        if (key in testCase) extra[key] = testCase[key];
+    }
+    report(`${testCase.fixture}${testCase.bodyOnly ? " (bodyOnly)" : ""}`, counts, testCase.cjk, testCase.words, extra);
 }
 
 for (const testCase of cases.text) {

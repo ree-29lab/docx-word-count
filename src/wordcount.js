@@ -81,43 +81,75 @@ function fileExists(path) {
         };
     }
 
-function localNameOf(node) {
-    var name = node.name;
-    if (!name) return "";
-    var value = name.js;
-    var colon = value.lastIndexOf(":");
-    return colon >= 0 ? value.slice(colon + 1) : value;
-}
+// Same tag scanner as src/count-core.cjs, so both implementations read a document
+// identically. NSXMLDocument is avoided here: it drops whitespace-only runs, which
+// changes the character count by one or two in real documents.
+var XML_TAG = /<(\/?)([A-Za-z0-9_.:-]+)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g;
+var SKIP_SUBTREES = { del: 1, instrText: 1, delText: 1 };
 
-// Escapes are already decoded by the XML parser; text nodes of w:t are literal.
-function walkNode(node, out) {
-    if (node.kind !== $.NSXMLElementKind) return;
-    var name = localNameOf(node);
-    if (name === "del" || name === "instrText" || name === "delText") return;
-    if (name === "t") {
-        var value = node.stringValue;
-        if (value && !(value.isNil && value.isNil())) out.push(String(value.js));
-        return;
-    }
-    if (name === "tab") {
-        out.push(" ");
-        return;
-    }
-    if (name === "br" || name === "cr") {
-        out.push("\n");
-        return;
-    }
-    var count = node.childCount;
-    for (var i = 0; i < count; i++) walkNode(node.childAtIndex(i), out);
-    if (name === "p") out.push("\n");
+function decodeEntities(text) {
+    if (text.indexOf("&") < 0) return text;
+    return text
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, "\"")
+        .replace(/&apos;/g, "'")
+        .replace(/&#x([0-9a-fA-F]+);/g, function (_, hex) {
+            return String.fromCodePoint(parseInt(hex, 16));
+        })
+        .replace(/&#(\d+);/g, function (_, dec) {
+            return String.fromCodePoint(parseInt(dec, 10));
+        })
+        .replace(/&amp;/g, "&");
 }
 
 function partText(xml) {
-    var data = $.NSString.alloc.initWithUTF8String(xml).dataUsingEncoding($.NSUTF8StringEncoding);
-    var doc = $.NSXMLDocument.alloc.initWithDataOptionsError(data, 0, null);
-    if (!doc || doc.isNil()) return null;
     var out = [];
-    walkNode(doc.rootElement, out);
+    var skipName = null;
+    var skipDepth = 0;
+    var textStart = -1;
+    var match;
+
+    XML_TAG.lastIndex = 0;
+    while ((match = XML_TAG.exec(xml)) !== null) {
+        var closing = match[1] === "/";
+        var name = match[2];
+        var local = name.indexOf(":") >= 0 ? name.slice(name.indexOf(":") + 1) : name;
+        var selfClosing = match[4] === "/";
+
+        if (skipDepth > 0) {
+            if (!selfClosing && local === skipName) skipDepth += closing ? -1 : 1;
+            continue;
+        }
+
+        if (!closing && !selfClosing && SKIP_SUBTREES[local]) {
+            skipName = local;
+            skipDepth = 1;
+            continue;
+        }
+
+        if (local === "t") {
+            if (closing) {
+                if (textStart >= 0) {
+                    out.push(decodeEntities(xml.slice(textStart, match.index)));
+                    textStart = -1;
+                }
+            } else if (!selfClosing) {
+                textStart = XML_TAG.lastIndex;
+            }
+            continue;
+        }
+
+        if (closing) {
+            if (local === "p") out.push("\n");
+            continue;
+        }
+
+        if (selfClosing || local === "tab" || local === "br" || local === "cr") {
+            if (local === "tab") out.push(" ");
+            else if (local === "br" || local === "cr") out.push("\n");
+        }
+    }
     return out.join("");
 }
 

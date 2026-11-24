@@ -95,6 +95,13 @@ def main(target: str) -> None:
         ),
     })
 
+    # A whitespace-only run between two runs of text must survive extraction.
+    build(os.path.join(target, "spacing.docx"), {
+        "word/document.xml": document(
+            para(run("啦！") + '<w:r><w:t xml:space="preserve"> </w:t></w:r>' + run("根本"))
+        ),
+    })
+
     # A field code (TOC, page number) must not be counted as text.
     build(os.path.join(target, "field-code.docx"), {
         "word/document.xml": document(

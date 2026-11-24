@@ -45,7 +45,11 @@ for case in cases["docx"]:
     try:
         data = json.loads(result.stdout)["files"][0]
         ok = data.get("ok") and data["cjk"] == case["cjk"] and data["words"] == case["words"]
-        detail = "cjk={} words={}".format(data.get("cjk"), data.get("words"))
+        for key in ("charsNoSpace", "chars"):
+            if key in case and data.get(key) != case[key]:
+                ok = False
+        detail = "cjk={} words={} charsNoSpace={} chars={}".format(
+            data.get("cjk"), data.get("words"), data.get("charsNoSpace"), data.get("chars"))
     except Exception:
         ok = False
         detail = "unparsable output: " + (result.stdout or result.stderr).strip()[:120]

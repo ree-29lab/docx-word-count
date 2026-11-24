@@ -8,7 +8,8 @@
     { "fixture": "with-header.docx", "bodyOnly": false, "cjk": 4, "words": 0 },
     { "fixture": "with-header.docx", "bodyOnly": true, "cjk": 2, "words": 0 },
     { "fixture": "field-code.docx", "bodyOnly": false, "cjk": 4, "words": 0 },
-    { "fixture": "english-tricky.docx", "bodyOnly": false, "cjk": 0, "words": 6 }
+    { "fixture": "english-tricky.docx", "bodyOnly": false, "cjk": 0, "words": 6 },
+    { "fixture": "spacing.docx", "bodyOnly": false, "cjk": 3, "words": 0, "charsNoSpace": 4, "chars": 5 }
   ],
   "text": [
     { "text": "", "cjk": 0, "words": 0 },
