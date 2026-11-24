@@ -48,7 +48,7 @@
     <div><strong>把 .docx 拖到这里</strong></div>
     <div style="margin-top:6px;font-size:13px">或点击选择文件（可多选）</div>
   </div>
-  <input type="file" id="filePicker" accept=".docx" multiple hidden>
+  <input type="file" id="filePicker" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
   <label class="toggle"><input type="checkbox" id="bodyOnly"> 只数正文（不含页眉页脚、脚注尾注）</label>
   <table id="results" aria-live="polite">
     <thead><tr><th>文件</th><th>中文字符</th><th>英文单词</th><th>字数</th><th>字符(不计空格)</th><th>字符(含空格)</th></tr></thead>
@@ -313,6 +313,7 @@
     var badge = document.getElementById("badge");
     var results = [];
     results.push(["text", core.countText("你好 world 42"), 2, 2]);
+    results.push(["hyphen", core.countText("state-of-the-art 1,000"), 0, 2]);
     (async function () {
       try {
         var plain = makeZip([{ name: "word/document.xml", text: wx("<w:p><w:r><w:t>你好 world 42</w:t></w:r></w:p>") }]);

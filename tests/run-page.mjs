@@ -80,7 +80,7 @@ while (waited < 3000 && !/通过|失败|出错/.test(badge.textContent)) {
 }
 
 const text = badge.textContent || "(空)";
-if (text === "自检 5/5 通过") {
+if (text === "自检 6/6 通过") {
     console.log("PASS  页面自检：" + text);
     process.exit(0);
 }

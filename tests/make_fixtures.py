@@ -88,6 +88,13 @@ def main(target: str) -> None:
         "word/header1.xml": document(para(run("页眉"))),
     })
 
+    # Hyphenated compounds, accented letters and grouped numbers stay single words.
+    build(os.path.join(target, "english-tricky.docx"), {
+        "word/document.xml": document(
+            para(run("state-of-the-art well-known e-mail COVID-19 café 1,000"))
+        ),
+    })
+
     # A field code (TOC, page number) must not be counted as text.
     build(os.path.join(target, "field-code.docx"), {
         "word/document.xml": document(

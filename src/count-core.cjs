@@ -4,11 +4,14 @@
 // other JavaScript host that has TextDecoder, Blob, Response and DecompressionStream.
 // Nothing here touches the DOM, the filesystem, or an OS API.
 //
-// Counting rules:
-//   - CJK characters (Chinese, kana, Hangul, CJK compatibility) count one each.
-//   - Runs of Latin letters, digits and apostrophes count one word each.
-//   - Everything else separates. Tabs and line breaks separate words.
-//   - Text that Word marks deleted (w:del / w:delText) and field codes (w:instrText) are skipped.
+// Counting follows the convention word processors use, which is also what most
+// counters and application word limits mean:
+//   - each CJK character is one word
+//   - a run of letters, digits and combining marks is one word, and stays one word
+//     across apostrophes, hyphens and underscores (don't, state-of-the-art) and
+//     across the separators inside numbers (1,000 / 3.14)
+//   - everything else separates words
+//   - text Word marks deleted (w:del / w:delText) and field codes (w:instrText) are skipped
 
 (function (root, factory) {
     if (typeof module === "object" && module.exports) {
@@ -23,13 +26,8 @@
     var SKIP_SUBTREES = { del: 1, instrText: 1, delText: 1 };
     var TAG = /<(\/?)([A-Za-z0-9_.:-]+)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g;
 
-    function isCjk(code) {
-        return (code >= 0x4E00 && code <= 0x9FFF) ||
-            (code >= 0x3400 && code <= 0x4DBF) ||
-            (code >= 0xF900 && code <= 0xFAFF) ||
-            (code >= 0x3040 && code <= 0x30FF) ||
-            (code >= 0xAC00 && code <= 0xD7AF);
-    }
+    var CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u;
+    var TOKEN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]|\p{Nd}+(?:[.,]\p{Nd}+)*|[\p{L}\p{N}\p{M}]+(?:['\u2019\-\u2010\u2011_][\p{L}\p{N}\p{M}]+)*/gu;
 
     function decodeEntities(text) {
         if (text.indexOf("&") < 0) return text;
@@ -47,29 +45,32 @@
             .replace(/&amp;/g, "&");
     }
 
+    function isSpace(code) {
+        return code === 32 || code === 9 || code === 10 || code === 13 ||
+            code === 0xA0 || code === 0x3000;
+    }
+
     function countText(text) {
         var cjk = 0;
         var words = 0;
         var noSpace = 0;
         var visible = 0;
-        var inWord = false;
+        var match;
+
+        TOKEN.lastIndex = 0;
+        while ((match = TOKEN.exec(text)) !== null) {
+            var token = match[0];
+            if (token.length === 1 && CJK_CHAR.test(token)) cjk++;
+            else words++;
+            if (TOKEN.lastIndex === match.index) TOKEN.lastIndex++;
+        }
+
         for (var i = 0; i < text.length; i++) {
             var code = text.charCodeAt(i);
             if (code !== 10 && code !== 13) visible++;
-            if (code !== 32 && code !== 9 && code !== 10 && code !== 13) noSpace++;
-            if (isCjk(code)) {
-                cjk++;
-                inWord = false;
-            } else if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) ||
-                (code >= 48 && code <= 57) || code === 39) {
-                if (!inWord) {
-                    words++;
-                    inWord = true;
-                }
-            } else {
-                inWord = false;
-            }
+            if (!isSpace(code)) noSpace++;
         }
+
         return {
             cjk: cjk,
             words: words,

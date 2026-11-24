@@ -38,33 +38,48 @@ function fileExists(path) {
     return $.NSFileManager.defaultManager.fileExistsAtPath(path);
 }
 
-// Same counting rule as the Notes panel: CJK per character, Latin per word.
-function countText(text) {
-    var cjk = 0;
-    var words = 0;
-    var noSpace = 0;
-    var visible = 0;
-    var inWord = false;
-    for (var i = 0; i < text.length; i++) {
-        var c = text.charCodeAt(i);
-        if (c !== 10 && c !== 13) visible++;
-        if (c !== 32 && c !== 9 && c !== 10 && c !== 13) noSpace++;
-        if ((c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF) ||
-            (c >= 0x3040 && c <= 0x309F) || (c >= 0x30A0 && c <= 0x30FF) ||
-            (c >= 0xAC00 && c <= 0xD7AF) || (c >= 0xF900 && c <= 0xFAFF)) {
-            cjk++;
-            inWord = false;
-        } else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 39) {
-            if (!inWord) {
-                words++;
-                inWord = true;
-            }
-        } else {
-            inWord = false;
-        }
+    // Word-processor convention, which is what most counters follow:
+    //   - each CJK character is one word
+    //   - a run of letters/digits counts one word, and stays one word across
+    //     apostrophes, hyphens, underscores (don't, state-of-the-art) and across
+    //     separators inside numbers (1,000 / 3.14)
+    var CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u;
+    var TOKEN = /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}|\p{Script=Bopomofo}|\p{Nd}+(?:[.,]\p{Nd}+)*|[\p{L}\p{N}\p{M}]+(?:['\u2019\-\u2010\u2011_][\p{L}\p{N}\p{M}]+)*/gu;
+
+    function isSpace(code) {
+        return code === 32 || code === 9 || code === 10 || code === 13 ||
+            code === 0xA0 || code === 0x3000;
     }
-    return { cjk: cjk, words: words, total: cjk + words, charsNoSpace: noSpace, chars: visible };
-}
+
+    function countText(text) {
+        var cjk = 0;
+        var words = 0;
+        var noSpace = 0;
+        var visible = 0;
+        var match;
+
+        TOKEN.lastIndex = 0;
+        while ((match = TOKEN.exec(text)) !== null) {
+            var token = match[0];
+            if (token.length === 1 && CJK_CHAR.test(token)) cjk++;
+            else words++;
+            if (TOKEN.lastIndex === match.index) TOKEN.lastIndex++;
+        }
+
+        for (var i = 0; i < text.length; i++) {
+            var code = text.charCodeAt(i);
+            if (code !== 10 && code !== 13) visible++;
+            if (!isSpace(code)) noSpace++;
+        }
+
+        return {
+            cjk: cjk,
+            words: words,
+            total: cjk + words,
+            chars: visible,
+            charsNoSpace: noSpace
+        };
+    }
 
 function localNameOf(node) {
     var name = node.name;
@@ -236,7 +251,11 @@ function run(argv) {
             ["你好 world 42", 2, 2],
             ["don't stop", 0, 2],
             ["あア한", 3, 0],
-            ["  多   空格  ", 3, 0]
+            ["  多   空格  ", 3, 0],
+            ["state-of-the-art", 0, 1],
+            ["1,000 apples", 0, 2],
+            ["café naïve", 0, 2],
+            ["你好world", 2, 1]
         ];
         var failures = 0;
         for (var i = 0; i < cases.length; i++) {
