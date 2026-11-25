@@ -15,6 +15,51 @@ One counting rule everywhere: **every CJK character counts one**, **every run of
 
 ---
 
+## 第一次用？照这里点（下载 → 安装）
+
+这张图是仓库首页的右上角，绿色按钮就是入口：
+
+![GitHub 上的 Code 按钮](docs/images/code-button.png)
+
+### 只想用网页版（Windows、手机、或者不想装东西）
+
+1. 打开这个网址：**https://ree-29lab.github.io/docx-word-count/docxcount.html**
+2. 已经能用了。把 `.docx` 拖进去，或者把文字粘进去。
+
+不需要下载、不需要安装、不需要任何权限。
+
+### 要装到 Mac 上用（右键菜单 + 终端命令 + 浮窗）
+
+**办法一：从 Releases 页下载（最简单，推荐）**
+
+1. 打开 https://github.com/ree-29lab/docx-word-count/releases/latest
+2. 页面往下滚，找到 **Assets** 这一段
+3. 点 **docx-word-count.zip** 下载
+4. 下载完双击这个 zip，macOS 会自己解压，得到一个 `docx-word-count` 文件夹
+5. 打开文件夹，**双击 `install.command`**
+6. 会弹出一个终端窗口自己跑完，最后显示「完成」就装好了
+
+**办法二：从仓库首页下载**
+
+1. 打开 https://github.com/ree-29lab/docx-word-count
+2. 点右上角绿色 **Code** 按钮（见上图）
+3. 弹出的菜单最下面点 **Download ZIP**
+4. 后面和第 4 步之后一样：解压 → 双击 `install.command`
+
+### 双击 `install.command` 打不开怎么办
+
+macOS 会拦一句「无法打开，因为来自身份不明的开发者」。放行方法：
+
+1. 打开 **系统设置 › 隐私与安全性**
+2. 页面往下翻，会看到刚才被拦的提示
+3. 点 **仍要打开**，再验证一次
+
+### 装完还要点一下（只针对浮窗）
+
+**系统设置 › 隐私与安全性 › 辅助功能** → 找到 **SelectionCount** → 打开开关。列表里没有就点 `+`，选 `~/Applications/SelectionCount.app`。
+
+不给这个权限也能用右键服务和终端命令，只是右下角那个「选中就出数」的浮窗不会动。
+
 ## 一、任何系统：单文件网页
 
 下载仓库里的 **`docxcount.html`**，双击用浏览器打开（Chrome / Edge / Safari / Firefox 都行），然后把 `.docx` 拖进方框——或者把一段文字粘进第二个框，边打边出字数。
